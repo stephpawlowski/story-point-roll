@@ -86,7 +86,20 @@ Right below `FIB`, the weights control how often each face lands:
 ```js
 const WEIGHTS = [5, 5, 6, 7, 7, 5, 2, 1]; // index matches FIB above
 ```
-Higher number = more likely. The current setup makes 3, 5, and 8 land a bit more often, and 21 and the bolt are rare.
+Higher number = more likely. Current approximate hit rates (weights sum to 38):
+
+| Face | Weight | ~Probability |
+|------|--------|-------------|
+| 1 | 5 | 13.2% |
+| 2 | 5 | 13.2% |
+| 3 | 6 | 15.8% |
+| 5 | 7 | 18.4% |
+| 8 | 7 | 18.4% |
+| 13 | 5 | 13.2% |
+| 21 | 2 | 5.3% |
+| ⚡ bolt | 1 | 2.6% |
+
+3, 5, and 8 are slightly favored as the most common agile story point values. 21 and the bolt are intentionally rare.
 
 **Roll duration**
 ```js
