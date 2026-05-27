@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Story Point Roll</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #f4f4f4;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'Poppins', sans-serif;
+      color: #23232d;
+      user-select: none;
+    }
+
+    #card {
+      background: #ffffff;
+      border-radius: 6px;
+      box-shadow:
+        0px 0px 0px 1px rgba(0, 0, 0, 0.08),
+        0px 2px 2px 0px rgba(0, 0, 0, 0.04),
+        0px 8px 8px -8px rgba(0, 0, 0, 0.04);
+      padding: 1.5rem 2rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+      max-width: 380px;
+      width: 100%;
+      overflow: visible; /* die drops from above card */
+    }
+
+    #card-header {
+      width: 100%;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid #e3e4e5;
+    }
+
+    h1 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #23232d;
+      line-height: 1.3;
+    }
+
+    #subtitle {
+      font-size: 0.7rem;
+      color: #6a6e7a;
+      font-weight: 400;
+      margin-top: 0.1rem;
+      display: block;
+    }
+
+    #die-container {
+      cursor: pointer;
+      position: relative;
+      z-index: 10;
+      will-change: transform;
+    }
+
+    canvas { display: block; }
+
+    #result-area {
+      display: none; /* hidden until first roll completes */
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      width: 100%;
+      padding: 0.25rem 0;
+    }
+
+    #result-number {
+      font-size: 2.8rem;
+      font-weight: 700;
+      color: #4f32ce;
+      line-height: 1;
+      min-width: 3.5rem;
+      text-align: center;
+      transition: opacity 0.22s, transform 0.22s;
+    }
+
+    #result-number.flash { opacity: 0; transform: scale(0.88); }
+
+    #result-label {
+      font-size: 0.7rem;
+      color: #6a6e7a;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-weight: 600;
+      text-align: left;
+      line-height: 1.4;
+      max-width: 9rem;
+    }
+
+    /* ── Lightning celebration overlay ───────────────────────────────────── */
+    #lightning-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      pointer-events: none;
+      display: none;
+    }
+
+    @keyframes bgFlash {
+      0%   { opacity: 0; }
+      8%   { opacity: 1; }
+      22%  { opacity: 0.05; }
+      38%  { opacity: 0.75; }
+      55%  { opacity: 0; }
+      70%  { opacity: 0.35; }
+      100% { opacity: 0; }
+    }
+
+    #lightning-bg {
+      position: absolute;
+      inset: 0;
+      background: rgba(255, 220, 40, 0.28);
+      animation: bgFlash 1s ease-out forwards;
+    }
+
+    @keyframes boltBurst {
+      0%   { opacity: 0;   transform: translate(-50%, -50%) translate(0, 0)                              scale(0.3); }
+      28%  { opacity: 1;   transform: translate(-50%, -50%) translate(var(--dx), var(--dy))              scale(1.9); }
+      100% { opacity: 0;   transform: translate(-50%, -50%) translate(calc(var(--dx)*2.1), calc(var(--dy)*2.1)) scale(0.5); }
+    }
+
+    .bolt-fx {
+      position: absolute;
+      animation: boltBurst 1s ease-out forwards;
+      opacity: 0;
+      line-height: 1;
+    }
+
+    @keyframes centerBolt {
+      0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+      18%  { opacity: 1; transform: translate(-50%, -50%) scale(2.8); }
+      55%  { opacity: 1; transform: translate(-50%, -50%) scale(2.2); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(1.2); }
+    }
+
+    #center-bolt {
+      position: absolute;
+      font-size: 3.5rem;
+      animation: centerBolt 1s ease-out forwards;
+      opacity: 0;
+    }
+
+    #roll-btn {
+      background: #4f32ce;
+      color: #ffffff;
+      border: 1px solid #4f32ce;
+      border-radius: 3px;
+      padding: 0.625rem 1.25rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      font-family: 'Poppins', sans-serif;
+      cursor: pointer;
+      letter-spacing: 0.02em;
+      transition: background 0.2s, border-color 0.2s, transform 0.1s;
+      align-self: stretch;
+    }
+
+    #roll-btn:hover:not(:disabled) { background: #3017a1; border-color: #3017a1; }
+    #roll-btn:active:not(:disabled) { transform: scale(0.99); }
+    #roll-btn:disabled {
+      background: #f4f4f4;
+      border-color: #c3c5c9;
+      color: #6a6e7a;
+      cursor: not-allowed;
+    }
+
+    #hint {
+      font-size: 0.68rem;
+      color: #c3c5c9;
+      letter-spacing: 0.03em;
+      margin-top: -0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div id="card">
+    <div id="card-header">
+      <h1>Story Point Roll</h1>
+      <span id="subtitle">What to use, when your brain can't choose</span>
+    </div>
+
+    <div id="die-container">
+      <canvas id="dice" width="240" height="240"></canvas>
+    </div>
+
+    <div id="result-area">
+      <div id="result-number"></div>
+      <div id="result-label"></div>
+    </div>
+
+    <button id="roll-btn">Roll the die</button>
+    <div id="hint">or click the die</div>
+  </div>
+
+  <div id="lightning-overlay"></div>
+
+  <script>
+    // ── Data ──────────────────────────────────────────────────────────────────
+    const BOLT = null; // sentinel — renders as Pantheon lightning bolt
+    const FIB  = [1, 2, 3, 5, 8, 13, 21, BOLT];
+
+    // Weighted probability per face — higher = more likely to land.
+    // 3, 5, 8 are common story points → heavier; 21 and bolt → rare.
+    const WEIGHTS = [5, 5, 6, 7, 7, 5, 2, 1]; // sums to 38
+
+    function weightedRandom() {
+      const total = WEIGHTS.reduce((a, b) => a + b, 0);
+      let r = Math.random() * total;
+      for (let i = 0; i < WEIGHTS.length; i++) {
+        r -= WEIGHTS[i];
+        if (r <= 0) return i;
+      }
+      return WEIGHTS.length - 1;
+    }
+
+    // Face colors: deep purple shadow → near-white lit (Gouraud interpolation)
+    const SHADOW_RGB = [48,  23, 161];  // #3017a1
+    const LIT_RGB    = [244, 243, 252]; // #f4f3fc
+
+    // ── Geometry ──────────────────────────────────────────────────────────────
+    const VERTS = [
+      [ 0,  1,  0],  // 0 top
+      [ 0, -1,  0],  // 1 bottom
+      [ 1,  0,  0],  // 2 right
+      [-1,  0,  0],  // 3 left
+      [ 0,  0,  1],  // 4 front
+      [ 0,  0, -1],  // 5 back
+    ];
+
+    const FACES = [  // [v0, v1, v2, fibIndex] — CCW outward winding
+      [0, 4, 2, 0],
+      [0, 3, 4, 1],
+      [0, 5, 3, 2],
+      [0, 2, 5, 3],
+      [1, 2, 4, 4],
+      [1, 4, 3, 5],
+      [1, 3, 5, 6],
+      [1, 5, 2, 7],
+    ];
+
+    // Per-face local "up" vector: centroid → first vertex of that face.
+    // This is purely face-local — it rotates exactly with the face, so numbers
+    // look carved into the die rather than floating on top of it.
+    const FACE_UPS = FACES.map(([i0, i1, i2]) => {
+      const c = [
+        (VERTS[i0][0]+VERTS[i1][0]+VERTS[i2][0])/3,
+        (VERTS[i0][1]+VERTS[i1][1]+VERTS[i2][1])/3,
+        (VERTS[i0][2]+VERTS[i1][2]+VERTS[i2][2])/3,
+      ];
+      return norm3(sub3(VERTS[i0], c));
+    });
+
+    const LIGHT = norm3([1.0, 2.2, 1.8]);
+    const VIEW  = [0, 0, 1];
+
+    // ── Canvas ────────────────────────────────────────────────────────────────
+    const canvas = document.getElementById('dice');
+    const ctx    = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const CX = W / 2, CY = H / 2;
+    const SCALE = 92, FOV = 480;
+
+    // ── Animation state ───────────────────────────────────────────────────────
+    let rx = 0.7, ry = -0.5, rz = 0.1; // nice initial 3D angle
+    let vx = 0, vy = 0, vz = 0;
+
+    // Roll
+    let rolling      = false;
+    let rollStart    = 0, rollEnd = 0, rollDuration = 0;
+    let baseVx = 0, baseVy = 0, baseVz = 0;
+    let targetFace   = -1;
+
+    // Settle (smooth rotate to show result face after roll)
+    let settling        = false;
+    let settleStart     = 0;
+    const SETTLE_MS     = 480;
+    let settleFromRx = 0, settleFromRy = 0, settleFromRz = 0;
+    let settleToRx   = 0, settleToRy   = 0, settleToRz   = 0;
+
+    // Drop
+    let dropping     = false;
+    let cssDropY     = 0;  // current CSS translateY offset (px)
+    let cssDropVelY  = 0;  // px per frame
+    let bounceCount  = 0;
+    const GRAVITY    = 1.5;  // px / frame²
+    const BOUNCE     = 0.40; // velocity retention
+    const STOP_VEL   = 2.5;  // px/frame below which we stop bouncing
+
+    const dieEl = document.getElementById('die-container');
+
+    // ── 3D math ───────────────────────────────────────────────────────────────
+    function rotX([x,y,z],a){ const c=Math.cos(a),s=Math.sin(a); return [x,y*c-z*s,y*s+z*c]; }
+    function rotY([x,y,z],a){ const c=Math.cos(a),s=Math.sin(a); return [x*c+z*s,y,-x*s+z*c]; }
+    function rotZ([x,y,z],a){ const c=Math.cos(a),s=Math.sin(a); return [x*c-y*s,x*s+y*c,z]; }
+    function project([x,y,z]){ const s=FOV/(FOV+z*SCALE+SCALE*0.8); return [CX+x*SCALE*s, CY-y*SCALE*s, z]; }
+    function cross3([ax,ay,az],[bx,by,bz]){ return [ay*bz-az*by, az*bx-ax*bz, ax*by-ay*bx]; }
+    function sub3([ax,ay,az],[bx,by,bz]){ return [ax-bx,ay-by,az-bz]; }
+    function dot3([ax,ay,az],[bx,by,bz]){ return ax*bx+ay*by+az*bz; }
+    function norm3(v){ const l=Math.sqrt(dot3(v,v)); return v.map(c=>c/l); }
+    function faceNormal(v3d,[i0,i1,i2]){
+      return norm3(cross3(sub3(v3d[i1],v3d[i0]), sub3(v3d[i2],v3d[i0])));
+    }
+    function centZ(v3d,[i0,i1,i2]){ return (v3d[i0][2]+v3d[i1][2]+v3d[i2][2])/3; }
+
+    // Gouraud: per-vertex brightness using vertex position as its own normal
+    function vertBright(v) {
+      const n    = norm3(v);
+      const diff = Math.max(0, dot3(n, LIGHT));
+      const half = norm3([LIGHT[0]+VIEW[0], LIGHT[1]+VIEW[1], LIGHT[2]+VIEW[2]]);
+      const spec = Math.pow(Math.max(0, dot3(n, half)), 32) * 0.25;
+      return Math.min(1, 0.18 + diff * 0.82 + spec);
+    }
+
+    function bToColor(b) {
+      const t  = Math.min(1, Math.max(0, b));
+      const r  = Math.round(SHADOW_RGB[0] + (LIT_RGB[0]-SHADOW_RGB[0]) * t);
+      const g  = Math.round(SHADOW_RGB[1] + (LIT_RGB[1]-SHADOW_RGB[1]) * t);
+      const bl = Math.round(SHADOW_RGB[2] + (LIT_RGB[2]-SHADOW_RGB[2]) * t);
+      return `rgb(${r},${g},${bl})`;
+    }
+
+    // Official Pantheon brand mark — icon-only viewBox 0 0 20 50
+    // Source: pds-react.pantheon.io PantheonLogo component (Sub Brand variant)
+    const BOLT_GOLD = [  // brand-secondary-default (#ffdc28) — the two spike shapes
+      'M2.2 0L6.6 10.6H1L2.8 15.2H14.2L2.2 0Z',
+      'M17.1 38.5L15.2 33.9H12.6L7.20001 20.8H4.90001L10.3 33.9H3.70001L15.9 49.1L11.5 38.5H17.1Z',
+    ];
+    const BOLT_BODY = [  // fg-default — the horizontal bar shapes forming the P body
+      'M18.6 19.9C18.7 19.9 19.1 19.7 19.1 18.1C19.1 16.5 18.8 16.3 18.6 16.3H10.8L12.3 19.9H18.6Z',
+      'M14 24.2H19.2C19.3 24.2 19.7 24 19.7 22.4C19.7 20.8 19.4 20.6 19.2 20.6H12.5L14 24.2Z',
+      'M19.3 24.9H9.79999L11.3 28.5H19.3C19.4 28.5 19.8 28.3 19.8 26.7C19.7 25.1 19.4 24.9 19.3 24.9Z',
+      'M18.6 29.2H11.5L13 32.8H18.6C18.7 32.8 19.1 32.6 19.1 31C19 29.4 18.7 29.2 18.6 29.2Z',
+      'M5.4 24.2L3.7 19.9H7.6L9.4 24.2H13.1L9.8 16.3H1.7C1.1 16.3 0.7 16.3 0.4 17.2C0.0999996 18.3 0 20.4 0 24.5C0 28.6 -3.8743e-07 30.7 0.4 31.8C0.7 32.7 1 32.7 1.7 32.7H8.8L5.4 24.2Z',
+    ];
+
+    function drawBolt(cx, cy, size, goldColor, shadowColor) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      const s = size / 50; // scale viewBox height 50 → desired pixel size
+      ctx.scale(s, s);
+      ctx.translate(-10, -25); // center the 20×50 viewBox at origin
+      ctx.shadowColor = shadowColor;
+      ctx.shadowBlur  = 3;
+      // Gold spikes
+      ctx.fillStyle = goldColor;
+      BOLT_GOLD.forEach(d => ctx.fill(new Path2D(d)));
+      // Body bars — white so they read clearly on the purple face
+      ctx.fillStyle = 'rgba(255,255,255,0.92)';
+      BOLT_BODY.forEach(d => ctx.fill(new Path2D(d)));
+      ctx.restore();
+    }
+
+    // ── Render ────────────────────────────────────────────────────────────────
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+
+      const v3d    = VERTS.map(v => rotZ(rotY(rotX(v, rx), ry), rz));
+      const v2d    = v3d.map(project);
+      // Sort face indices back-to-front (painter's algorithm)
+      const sortedIdx = FACES.map((_,i) => i)
+        .sort((a, b) => centZ(v3d, FACES[b]) - centZ(v3d, FACES[a]));
+
+      // Shadow ellipse — fades in as die nears its rest position
+      const shadowAlpha = dropping
+        ? Math.max(0, 1 - Math.abs(cssDropY) / 60) * 0.09
+        : 0.09;
+      if (shadowAlpha > 0.002) {
+        ctx.save();
+        ctx.globalAlpha = shadowAlpha;
+        const ss = dropping ? Math.max(0.4, 1 - Math.abs(cssDropY) / 120) : 1;
+        ctx.beginPath();
+        ctx.ellipse(CX, CY + SCALE * 0.86, SCALE * 0.68 * ss, SCALE * 0.16 * ss, 0, 0, Math.PI*2);
+        ctx.fillStyle = '#23232d';
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Faces with Gouraud (gradient) shading
+      for (const faceIdx of sortedIdx) {
+        const face = FACES[faceIdx];
+        const normal      = faceNormal(v3d, face);
+        const viewFacing  = dot3(normal, VIEW); // 0 = edge-on, 1 = face-on
+        if (viewFacing < 0) continue;
+
+        const [i0, i1, i2, fi] = face;
+        const [p0, p1, p2]     = [v2d[i0], v2d[i1], v2d[i2]];
+
+        const b0 = vertBright(v3d[i0]);
+        const b1 = vertBright(v3d[i1]);
+        const b2 = vertBright(v3d[i2]);
+
+        // Sort verts brightest→darkest for gradient direction
+        const pts  = [[b0,p0],[b1,p1],[b2,p2]].sort((a,z)=>z[0]-a[0]);
+        const litB = pts[0][0], litP = pts[0][1];
+        const shdB = pts[2][0], shdP = pts[2][1];
+
+        const grad = ctx.createLinearGradient(litP[0], litP[1], shdP[0], shdP[1]);
+        grad.addColorStop(0,    bToColor(litB));
+        grad.addColorStop(0.65, bToColor(litB * 0.55 + shdB * 0.45));
+        grad.addColorStop(1,    bToColor(shdB));
+
+        ctx.beginPath();
+        ctx.moveTo(p0[0], p0[1]);
+        ctx.lineTo(p1[0], p1[1]);
+        ctx.lineTo(p2[0], p2[1]);
+        ctx.closePath();
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        // Edge
+        ctx.strokeStyle = '#ffdc28';
+        ctx.lineWidth   = 1.2;
+        ctx.stroke();
+
+        // Label — number or Pantheon bolt, rotated with the face in 3D
+        const avgB      = (b0 + b1 + b2) / 3;
+        const tScaleN   = FOV / (FOV + centZ(v3d,face) * SCALE + SCALE * 0.8);
+        // Combine depth perspective with how directly the face points at the viewer.
+        // viewFacing (0→edge-on, 1→face-on) gives a wide, natural size range:
+        // ~100% when facing camera, shrinking to ~20% near edge-on.
+        const labelScale = tScaleN * (0.6 + viewFacing * 0.4);
+        const val        = FIB[fi];
+        const szMult     = (val !== BOLT && String(val).length > 1) ? 16 : 22;
+        const fontSize   = Math.max(4, Math.round(szMult * labelScale));
+        const fgColor   = '#ffffff';
+        const fgShadow  = 'rgba(0,0,0,0.35)';
+
+        // Project the true 3D centroid — used as both the text draw position
+        // and the base for the angle calc so there's no mixed reference frame.
+        const cent3d = [
+          (v3d[i0][0]+v3d[i1][0]+v3d[i2][0])/3,
+          (v3d[i0][1]+v3d[i1][1]+v3d[i2][1])/3,
+          (v3d[i0][2]+v3d[i1][2]+v3d[i2][2])/3,
+        ];
+        const centP    = project(cent3d);
+        const numX     = centP[0];
+        const numY     = centP[1];
+
+        // Rotate the face's local "up" (purely face-local, not world-relative)
+        // then project it to find the screen-space orientation angle.
+        const upRot = rotZ(rotY(rotX(FACE_UPS[faceIdx], rx), ry), rz);
+        const tipP  = project([
+          cent3d[0] + upRot[0] * 0.2,
+          cent3d[1] + upRot[1] * 0.2,
+          cent3d[2] + upRot[2] * 0.2,
+        ]);
+        const textAngle = Math.atan2(tipP[1] - numY, tipP[0] - numX) + Math.PI / 2;
+
+        ctx.save();
+        ctx.translate(numX, numY);
+        ctx.rotate(textAngle);
+        if (FIB[fi] === BOLT) {
+          // Bolt is always Pantheon gold, rotates with its face
+          drawBolt(0, 0, fontSize * 1.8, '#ffe94d', 'rgba(0,0,0,0.25)');
+        } else {
+          ctx.fillStyle    = fgColor;
+          ctx.font         = `700 ${fontSize}px 'Poppins', sans-serif`;
+          ctx.textAlign    = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.shadowColor  = fgShadow;
+          ctx.shadowBlur   = 2;
+          ctx.fillText(FIB[fi], 0, 0);
+        }
+        ctx.restore();
+      }
+    }
+
+    // ── Pantheon bolt SVG helper ──────────────────────────────────────────────
+    // Returns an inline SVG string using the official PDS icon paths.
+    // barColor: color for the horizontal bar shapes (gold spikes are always #ffe94d).
+    function boltSVG(heightPx, barColor) {
+      const w = Math.round(heightPx * 20 / 50);
+      const bars = [
+        'M18.6 19.9C18.7 19.9 19.1 19.7 19.1 18.1C19.1 16.5 18.8 16.3 18.6 16.3H10.8L12.3 19.9H18.6Z',
+        'M14 24.2H19.2C19.3 24.2 19.7 24 19.7 22.4C19.7 20.8 19.4 20.6 19.2 20.6H12.5L14 24.2Z',
+        'M19.3 24.9H9.79999L11.3 28.5H19.3C19.4 28.5 19.8 28.3 19.8 26.7C19.7 25.1 19.4 24.9 19.3 24.9Z',
+        'M18.6 29.2H11.5L13 32.8H18.6C18.7 32.8 19.1 32.6 19.1 31C19 29.4 18.7 29.2 18.6 29.2Z',
+        'M5.4 24.2L3.7 19.9H7.6L9.4 24.2H13.1L9.8 16.3H1.7C1.1 16.3 0.7 16.3 0.4 17.2C0.0999996 18.3 0 20.4 0 24.5C0 28.6 -3.8743e-07 30.7 0.4 31.8C0.7 32.7 1 32.7 1.7 32.7H8.8L5.4 24.2Z',
+      ].map(d => `<path d="${d}" fill="${barColor}"/>`).join('');
+      return `<svg width="${w}" height="${heightPx}" viewBox="0 0 20 50" xmlns="http://www.w3.org/2000/svg" fill="none" style="display:block">
+        <path d="M2.2 0L6.6 10.6H1L2.8 15.2H14.2L2.2 0Z" fill="#ffe94d"/>
+        <path d="M17.1 38.5L15.2 33.9H12.6L7.20001 20.8H4.90001L10.3 33.9H3.70001L15.9 49.1L11.5 38.5H17.1Z" fill="#ffe94d"/>
+        ${bars}
+      </svg>`;
+    }
+
+    // ── Lightning celebration ─────────────────────────────────────────────────
+    function triggerLightning() {
+      const overlay = document.getElementById('lightning-overlay');
+      const rect    = dieEl.getBoundingClientRect();
+      const cx      = rect.left + rect.width  / 2;
+      const cy      = rect.top  + rect.height / 2;
+
+      overlay.innerHTML = `<div id="lightning-bg"></div>
+        <div id="center-bolt" style="left:${cx}px;top:${cy}px">${boltSVG(64, '#23232d')}</div>`;
+
+      [0, 45, 90, 135, 180, 225, 270, 315].forEach((deg, i) => {
+        const rad  = deg * Math.PI / 180;
+        const dist = 85 + Math.random() * 65;
+        const h    = Math.round(28 + Math.random() * 20);
+        const b    = document.createElement('div');
+        b.className = 'bolt-fx';
+        b.innerHTML = boltSVG(h, '#23232d');
+        b.style.cssText = `left:${cx}px;top:${cy}px;animation-delay:${i * 35}ms`;
+        b.style.setProperty('--dx', `${Math.cos(rad) * dist}px`);
+        b.style.setProperty('--dy', `${Math.sin(rad) * dist}px`);
+        overlay.appendChild(b);
+      });
+
+      overlay.style.display = 'block';
+      setTimeout(() => { overlay.style.display = 'none'; }, 1200);
+    }
+
+    // ── Result reveal ─────────────────────────────────────────────────────────
+    function showResult() {
+      const result   = FIB[targetFace];
+      const numEl    = document.getElementById('result-number');
+      const lblEl    = document.getElementById('result-label');
+      const areaEl   = document.getElementById('result-area');
+
+      areaEl.style.display = 'flex';
+      numEl.classList.add('flash');
+      setTimeout(() => {
+        if (result === BOLT) {
+          numEl.innerHTML = boltSVG(52, '#23232d');
+        } else {
+          numEl.textContent = result;
+        }
+        numEl.classList.remove('flash');
+        lblEl.textContent = result === BOLT ? 'Wild card — you decide!' : 'Story points!';
+        if (result === BOLT) triggerLightning();
+      }, 240);
+      document.getElementById('roll-btn').disabled = false;
+      document.getElementById('roll-btn').textContent = 'Roll again';
+    }
+
+    // Returns the face index whose normal most points toward the viewer right now
+    function getTopFace() {
+      const v3d = VERTS.map(v => rotZ(rotY(rotX(v, rx), ry), rz));
+      let best = 0, bestD = -Infinity;
+      FACES.forEach((face, i) => {
+        const d = dot3(faceNormal(v3d, face), VIEW);
+        if (d > bestD) { bestD = d; best = i; }
+      });
+      return best;
+    }
+
+    // Computes rx, ry, rz so that:
+    //   1. faceIdx's normal aligns with VIEW [0,0,1]  (face points at viewer)
+    //   2. The face's own label "up" (FACE_UPS[faceIdx]) appears upward on screen,
+    //      so the number/bolt reads naturally in the settled position.
+    function faceTargetAngles(faceIdx) {
+      const [i0, i1, i2] = FACES[faceIdx];
+      const n    = norm3(cross3(sub3(VERTS[i1], VERTS[i0]), sub3(VERTS[i2], VERTS[i0])));
+      const tRx  = Math.atan2(n[1], n[2]);
+      const tRy  = -Math.atan2(n[0], Math.sqrt(n[1]*n[1] + n[2]*n[2]));
+      // After aligning the face normal with VIEW via (tRx, tRy), find the rz that
+      // rotates the face's label-up direction to point upward on screen.
+      const labelUp   = FACE_UPS[faceIdx];
+      const upAfterXY = rotY(rotX(labelUp, tRx), tRy);
+      const tRz       = Math.atan2(upAfterXY[0], upAfterXY[1]);
+      return [tRx, tRy, tRz];
+    }
+
+    // Shortest angular path from `from` to `to` (handles large accumulated angles)
+    function shortAngle(from, to) {
+      const TAU = 2 * Math.PI;
+      const d = ((to - from) % TAU + 3 * Math.PI) % TAU - Math.PI;
+      return from + d;
+    }
+
+    // ── Main loop ─────────────────────────────────────────────────────────────
+    function loop(ts) {
+      // Drop physics (frame-rate based, runs ~60fps)
+      if (dropping) {
+        cssDropVelY += GRAVITY;
+        cssDropY    += cssDropVelY;
+
+        if (cssDropY >= 0) {
+          cssDropY    = 0;
+          cssDropVelY = -Math.abs(cssDropVelY) * BOUNCE;
+          bounceCount++;
+
+          // Roll timer starts on first ground contact
+          if (bounceCount === 1) {
+            rollStart = ts;
+            rollEnd   = ts + rollDuration;
+            rolling   = true;
+          }
+
+          if (Math.abs(cssDropVelY) < STOP_VEL) {
+            dropping    = false;
+            cssDropY    = 0;
+            cssDropVelY = 0;
+          }
+        }
+        dieEl.style.transform = `translateY(${cssDropY}px)`;
+      }
+
+      // Roll physics (time-based)
+      if (rolling) {
+        const remaining = rollEnd - ts;
+        const progress  = 1 - Math.max(0, remaining / (rollEnd - rollStart));
+
+        if (remaining <= 0) {
+          rolling = false;
+          vx = 0; vy = 0; vz = 0;
+          // Settle: smoothly rotate to show the pre-picked face head-on
+          const [toRx, toRy, toRz] = faceTargetAngles(targetFace);
+          settleFromRx = rx; settleFromRy = ry; settleFromRz = rz;
+          settleToRx   = shortAngle(rx, toRx);
+          settleToRy   = shortAngle(ry, toRy);
+          settleToRz   = shortAngle(rz, toRz);
+          settling     = true;
+          settleStart  = ts;
+        } else {
+          const DECEL_AT = 0.60;
+          if (progress < DECEL_AT) {
+            vx = baseVx; vy = baseVy; vz = baseVz;
+          } else {
+            const t = (progress - DECEL_AT) / (1 - DECEL_AT);
+            const f = Math.exp(-5.5 * t);
+            vx = baseVx * f; vy = baseVy * f; vz = baseVz * f;
+          }
+        }
+      }
+
+      if (settling) {
+        const t = Math.min(1, (ts - settleStart) / SETTLE_MS);
+        const s = t * t * (3 - 2 * t); // smoothstep
+        rx = settleFromRx + (settleToRx - settleFromRx) * s;
+        ry = settleFromRy + (settleToRy - settleFromRy) * s;
+        rz = settleFromRz + (settleToRz - settleFromRz) * s;
+        if (t >= 1) {
+          settling = false;
+          rx = settleToRx; ry = settleToRy; rz = settleToRz;
+          showResult();
+        }
+      } else {
+        rx += vx; ry += vy; rz += vz;
+      }
+
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    // ── Roll trigger ──────────────────────────────────────────────────────────
+    function roll() {
+      if (rolling || dropping) return;
+
+      rollDuration = (2 + Math.random() * 4) * 1000; // 2–6s, drop/bounce excluded
+      targetFace   = weightedRandom(); // pre-pick with desired probabilities
+
+      const sign = () => (Math.random() < 0.5 ? 1 : -1);
+      baseVx = sign() * (0.038 + Math.random() * 0.034);
+      baseVy = sign() * (0.045 + Math.random() * 0.040);
+      baseVz = sign() * (0.014 + Math.random() * 0.018);
+      // Die spins from the moment it's thrown
+      vx = baseVx; vy = baseVy; vz = baseVz;
+
+      // Start position: just above the top of the viewport
+      const rect = dieEl.getBoundingClientRect();
+      const naturalMidY = rect.top + rect.height / 2;
+      cssDropY    = -(naturalMidY + SCALE); // center starts SCALE px above viewport top
+      cssDropVelY = 0;
+      dropping    = true;
+      bounceCount = 0;
+      rolling     = false;
+      dieEl.style.transform = `translateY(${cssDropY}px)`;
+
+      document.getElementById('roll-btn').disabled = true;
+      document.getElementById('roll-btn').textContent = 'Rolling…';
+      const areaEl = document.getElementById('result-area');
+      areaEl.style.display = 'flex';
+      document.getElementById('result-number').textContent = '?';
+      document.getElementById('result-label').textContent = '';
+    }
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+    document.getElementById('roll-btn').addEventListener('click', roll);
+    document.getElementById('die-container').addEventListener('click', roll);
+
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
