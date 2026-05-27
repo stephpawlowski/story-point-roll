@@ -283,6 +283,9 @@
     let baseVx = 0, baseVy = 0, baseVz = 0;
     let targetFace   = -1;
 
+    // Frame-rate normalisation
+    let lastTs = 0; // timestamp of previous frame
+
     // Settle (smooth rotate to show result face after roll)
     let settling        = false;
     let settleStart     = 0;
@@ -584,10 +587,15 @@
 
     // ── Main loop ─────────────────────────────────────────────────────────────
     function loop(ts) {
-      // Drop physics (frame-rate based, runs ~60fps)
+      // dt = 1.0 at 60fps, 0.5 at 120fps, 2.0 at 30fps — keeps physics consistent
+      // across browsers and display refresh rates. Capped at 3 to absorb tab-switch gaps.
+      const dt = lastTs ? Math.min((ts - lastTs) / (1000 / 60), 3) : 1;
+      lastTs = ts;
+
+      // Drop physics (frame-rate independent)
       if (dropping) {
-        cssDropVelY += GRAVITY;
-        cssDropY    += cssDropVelY;
+        cssDropVelY += GRAVITY * dt;
+        cssDropY    += cssDropVelY * dt;
 
         if (cssDropY >= 0) {
           cssDropY    = 0;
@@ -650,7 +658,7 @@
           showResult();
         }
       } else {
-        rx += vx; ry += vy; rz += vz;
+        rx += vx * dt; ry += vy * dt; rz += vz * dt;
       }
 
       draw();
